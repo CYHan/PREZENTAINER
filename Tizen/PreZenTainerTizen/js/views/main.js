@@ -26,22 +26,19 @@ define({
         initialised = false,
         startbtn = null,
         stopbtn = null,
-        pceventbtn = null,
+        pceventbtn_right = null,pceventbtn_left=null,
 
     ERROR_FILE_WRITE = 'FILE_WRITE_ERR',
     NO_FREE_SPACE_MSG = 'No free space.',
     CANNOT_ACCESS_AUDIO_MSG = 'Cannot access audio stream. '+'Please close all applications that use the audio stream and '+'open the application again.',
 
-    recordProgress = null,
-    recordProgressVal = null,
     
     stream = null,
-    RECORDING_INTERVAL_STEP = 100,
-    recordingInterval = null, isRecording = false, recordingTime = 0, exitInProgress = false;
+    
+    isRecording = false,  exitInProgress = false;
 
-    var eventTimeArray = new Array(),
-        currentEventTime = null,
-        jsonInfoET =null;
+    var rightEventTimeArray = new Array(),
+        leftEventTimeArray =  new Array();
     //////////////////////////////////////////////////RECORDING////////////////////////////////////////////////////////////////////////
     
     // 처음시작할때 recording 상태로 만들어준다. ----> toggleRecording();
@@ -53,52 +50,15 @@ define({
       }
     }
 
-    // Recording ProgressBar 렌더링 값 설정
-    function renderRecordingProgressBarValue(value) {
-      recordProgressVal.style.width = value + 'px';
-    }
-
-    // Recording ProgressBar 렌더링 작업
-    function renderRecordingProgressBar() {
-      var parentWidth = recordProgress.clientWidth, width = recordingTime
-              / a.MAX_RECORDING_TIME * parentWidth;
-      renderRecordingProgressBarValue(width);
-    }
-
-    // Reset Recording ProgressBar 
-    function resetRecordingProgress() {
-      recordingTime = 0;
-      renderRecordingProgressBar();
-    }
-
-    // Remove Recording ProgressBar Interval 
-    function removeRecordingInterval() {
-      clearInterval(recordingInterval);
-    }
-
-    // Update Recording ProgressBar
-    function updateRecordingProgress() {
-      recordingTime = a.getRecordingTime();
-
-      renderRecordingProgressBar();
-    }
-
-    // Sets recording interval
-    function setRecordingInterval() {
-      recordingInterval = setInterval(updateRecordingProgress,
-              RECORDING_INTERVAL_STEP);
-    }
 
     // Starts audio recording
     function startRecording() {
       a.startRecording();
-      resetRecordingProgress();
     }
 
     // Stops audio recording
     function stopRecording() {
       a.stopRecording();
-      resetRecordingProgress();
       isRecording = false;
     }
 
@@ -132,7 +92,6 @@ define({
 
     // Handles audio.recording.start event
     function onRecordingStart() {
-      setRecordingInterval();
       toggleRecording(true);
     }
 
@@ -140,9 +99,7 @@ define({
     function onRecordingDone(ev) {
       var path = ev.detail.path;
 
-      removeRecordingInterval();
       toggleRecording(false);
-      updateRecordingProgress();
       if (!exitInProgress) {
         e.fire('show.preview', {
           audio: path
@@ -165,7 +122,6 @@ define({
         console.error('Error: ' + error);
       }
 
-      removeRecordingInterval();
       toggleRecording(false);
     }
 
@@ -216,25 +172,59 @@ define({
         return time;
     }
     
-    function makeJsonEventTime(){
+    /*
+     * 
+     * JSON Object를 생성해서 right / left를 구분
+     * 
+     * { 
+
+        "right" : [ 3972,6794,12456,19789 ],
+
+​         "left" : [4524,10032,15764]
+
+        }
+
+     * 
+     * 
+     */
+    
+    // Event가 일어난 시점(milliseconds)을 배열에 넣는다. ex [6294,8254,10234]
+    function pushEventTimeToArray(direction){
+      var currentEventTime = timer.getTimeElapsed();
       
-      try {
-        currentEventTime = timer.getTimeElapsed();
-        eventTimeArray.push(currentEventTime);
-        console.log(eventTimeArray);
-      } catch (e) {
-        console.error('makeJsonEventTimeError : '+e);
+      if(direction === "right"){
+        
+        rightEventTimeArray.push(currentEventTime);
+        console.log("rightEventTimeArray : "+rightEventTimeArray);
+        
+      }else if(direction === "leftt"){
+        
+        leftEventTimeArray.push(currentEventTime);
+        console.log("leftEventTimeArray : "+leftEventTimeArray);
+        
       }
-      
+    }
+    
+    
+    function makeJsonObjEventTime(){
+      // JSON Obj
+      var eventTimeObject = {};
+      eventTimeObject.right = rightEventTimeArray;
+      eventTimeObject.left = leftEventTimeArray;
+      return eventTimeObject;
     }
     
   //time event JSON을 ANDROID로 보내기
     function sendJsonEventTime(){
       
       try {
-          jsonInfoET = JSON.stringify(eventTimeArray);
+          var jsonInfoET = JSON.stringify(makeJsonObjEventTime());
           mSASocket.sendData(CHANNELID_EVENTTIME, jsonInfoET);
           console.log("Event Time sent : " + jsonInfoET);
+          // JSON Array Initialize...
+          rightEventTimeArray = [];
+          leftEventTimeArray = [];
+          console.log("eventTimeArray Initialize Success : " + rightEventTimeArray + leftEventTimeArray);
       } catch (err) {
         console.log("exception [" + err.name + "] msg[" + err.message + "]");
       }
@@ -298,6 +288,7 @@ define({
         stopHR();
         stopTimer();
         disconnectSAP();
+        //코드수정
       }
     }
 
@@ -306,34 +297,38 @@ define({
       startTimeWatch();
       updateAfterStart();
       setStart();
+      // pointer로 pushEventTimeToArray함수 메모리 공간 참조
+      p_pushEventTimeToArray = pushEventTimeToArray; 
     }
 
     function onStopBtnClick() {
       stopTimeWatch();
       setStop();
       updateAfterStop();
+      $('#startbtn').attr('type','button');
     }
     
-    function onPcEventBtnClick(){
-      eventtopc();
-      makeJsonEventTime();
-      
+    function onPcEventBtnClickRight(){
+      eventtopc("right");
+    }
+    function onPcEventBtnClickLeft(){
+      eventtopc("leftt");
     }
 
     // Registers event listeners
     function bindEvents() {
       startbtn.addEventListener('click', onStartBtnClick);
       stopbtn.addEventListener('click', onStopBtnClick);
-      pceventbtn.addEventListener('click', onPcEventBtnClick);
+      pceventbtn_right.addEventListener('click', onPcEventBtnClickRight);
+      pceventbtn_left.addEventListener('click', onPcEventBtnClickLeft);
     }
     
     // Initialize modules
     function init() {
       startbtn = document.getElementById('startbtn');
       stopbtn = document.getElementById('stopbtn');
-      pceventbtn = document.getElementById('pceventbtn');
-      recordProgress = document.getElementById('record-progress');
-      recordProgressVal = document.getElementById('record-progress-val');
+      pceventbtn_right = document.getElementById('pceventbtn_right');
+      pceventbtn_left = document.getElementById('pceventbtn_left');
       bindEvents();
       initStream();
       initStopWatch();
